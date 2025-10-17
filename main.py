@@ -1,58 +1,29 @@
 import streamlit as st
 import requests
-import re
+from bs4 import BeautifulSoup
 
-st.set_page_config(page_title="IARE Attendance Calculator", page_icon="📋")
 st.title("IARE Attendance Percentage Calculator")
-st.write("Enter your IARE credentials to fetch and calculate your attendance.")
 
-with st.form("login_form"):
-    username = st.text_input("IARE Username")
-    password = st.text_input("IARE Password", type="password")
+with st.form("login"):
+    st.write("This demo does not do real login, you must provide raw attendance page HTML copy-paste (see below).")
+    html = st.text_area("Paste your attendance HTML here")
     submitted = st.form_submit_button("Calculate Attendance")
 
-if submitted and username and password:
-    with requests.Session() as session:
-        try:
-            login_url = "https://samvidha.iare.ac.in/login"
-            attendance_url = "https://samvidha.iare.ac.in/home?action=stud_att_STD"
-            payload = {
-                'username': username,
-                'password': password,
-            }
-            session.post(login_url, data=payload, timeout=15)
-            att_page = session.get(attendance_url, timeout=15)
-            content = att_page.text
-
-            # Extract attendance lines using regex
-            lines = re.findall(r"\| \d+ \| [^\n]+\|", content)
-            subjects = []
-            conducted = attended = 0
-
-            for line in lines:
-                # Split by '|', strip spaces
-                parts = [p.strip() for p in line.split('|')]
-                # S.No | Code | Name | Type | Category | Conducted | Attended | % | Status
-                subject = parts[3]
-                c = int(parts[6])
-                a = int(parts[7])
-                p = float(parts[8])
-                conducted += c
-                attended += a
-                subjects.append({'Subject': subject, 'Conducted': c, 'Attended': a, 'Attendance %': p})
-
-            overall = (attended / conducted) * 100 if conducted else 0
-            st.success(f"Your overall attendance is **{overall:.2f}%**")
-            st.subheader("Subject-wise Attendance")
-            st.table(subjects)
-
-        except Exception as e:
-            st.error(
-                "Error: Could not parse attendance. "
-                "This portal may use dynamic JS or captcha, or require Selenium. "
-                "If scraping fails, run Selenium code locally instead. "
-                f"Details: {str(e)}"
-            )
-
-else:
-    st.info("Please enter your username and password to begin.")
+if submitted and html:
+    soup = BeautifulSoup(html, "html.parser")
+    rows = soup.find_all("tr")[3:]  # Skips top 3 header rows
+    subjects = []
+    conducted = attended = 0
+    for row in rows:
+        cols = [x.get_text(strip=True) for x in row.find_all("td")]
+        if len(cols) >= 9 and cols[0].isdigit():
+            subject = cols[2]
+            c = int(cols[5])
+            a = int(cols[6])
+            conducted += c
+            attended += a
+            subjects.append({'Subject': subject, 'Conducted': c, 'Attended': a, 'Attendance %': cols[7]})
+    overall = (attended / conducted) * 100 if conducted else 0
+    st.success(f"Your overall attendance is **{overall:.2f}%**")
+    st.subheader("Subject-wise Attendance")
+    st.table(subjects)
